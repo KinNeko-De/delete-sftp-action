@@ -19,6 +19,8 @@ This action implements an SFTP deletion strategy that:
 
 # Usage
 
+**Note:** Directories with spaces in their names are not supported by this action.
+
 This repository can be used directly as a GitHub Action. Add a step to your workflow that uses this repository. Note: this action expects sshpass and sftp to be available on the runner. GitHub-hosted Ubuntu runners typically include these tools.
 
 # Inputs
