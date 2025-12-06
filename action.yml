@@ -1,0 +1,45 @@
+name: "SFTP Delete Action for IONOS"
+description: "Delete files on IONOS via SFTP. Deletes files in the specified remote directory."
+author: "KinNeko-De"
+inputs:
+  ftp_username:
+    description: "SFTP username"
+    required: true
+  ftp_password:
+    description: "SFTP password (use GitHub Secrets)"
+    required: true
+  ftp_server:
+    description: "SFTP server hostname or IP"
+    required: true
+  ftp_port:
+    description: "SFTP port (default 22)"
+    required: false
+    default: "22"
+  dir_to_delete:
+    description: "Remote directory to delete files from on the server."
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Verify runtime dependencies
+      shell: bash
+      run: |
+        if ! command -v sshpass >/dev/null; then
+          echo "Error: sshpass not found on the runner. Please use a runner with sshpass installed (e.g. a GitHub-hosted ubuntu runner) or install sshpass manually."
+          exit 1
+        fi
+        if ! command -v sftp >/dev/null; then
+          echo "Error: sftp not found on the runner. Please ensure openssh-client is available."
+          exit 1
+        fi
+
+    - name: Run delete script
+      shell: bash
+      env:
+        FTP_USERNAME: ${{ inputs.ftp_username }}
+        FTP_PASSWORD: ${{ inputs.ftp_password }}
+        FTP_SERVER: ${{ inputs.ftp_server }}
+        FTP_PORT: ${{ inputs.ftp_port }}
+        DIR_TO_DELETE: ${{ inputs.dir_to_delete }}
+      run: |
+        bash "$GITHUB_ACTION_PATH/delete-sftp.sh"
