@@ -33,49 +33,35 @@ if [ -n "${DIR_TO_DELETE-}" ] && [ "$DIR_TO_DELETE" != "." ]; then
 fi
 
 batch="$tmpdir/delete_batch.txt"
-# List files and directories (non-recursive)
-ls_output="$tmpdir/ls.txt"
-printf '%s\n' "cd $DIR_TO_DELETE" "ls -l" "bye" | sshpass -e sftp -oBatchMode=no -oStrictHostKeyChecking=no -P "$FTP_PORT" "$FTP_USERNAME@$FTP_SERVER" > "$ls_output" 2>&1 || true
-echo "SFTP ls output for $DIR_TO_DELETE:"
-cat "$ls_output"
 
-files_to_delete=$(awk '/^-/{print $NF}' "$ls_output")
-dirs_to_delete=$(awk '/^d/{print $NF}' "$ls_output")
+build_delete_commands() {
+  local path="$1"
+  local safe_name
+  safe_name=$(printf '%s' "$path" | tr '/' '_')
+  local ls_out="$tmpdir/ls_${safe_name}.txt"
 
-batch="$tmpdir/delete_batch.txt"
-for f in $files_to_delete; do
-  echo "rm $DIR_TO_DELETE/$f" >> "$batch"
-done
+  printf '%s\n' "cd $path" "ls -l" "bye" \
+    | sshpass -e sftp -oBatchMode=no -oStrictHostKeyChecking=no -P "$FTP_PORT" "$FTP_USERNAME@$FTP_SERVER" \
+    > "$ls_out" 2>&1 || true
 
-for d in $dirs_to_delete; do
-  # Guard: test cd to subdirectory, exit loop if it fails
-  sub_guard_output="$tmpdir/sftp_sub_guard_check_$d.txt"
-  printf '%s\n' "cd $DIR_TO_DELETE/$d" 'bye' | sshpass -e sftp -oBatchMode=no -oStrictHostKeyChecking=no -P "$FTP_PORT" "$FTP_USERNAME@$FTP_SERVER" > "$sub_guard_output" 2>&1
-  sub_guard_exit_code=$?
-  if grep -q "No such file or directory" "$sub_guard_output"; then
-    echo "SFTP exit code for subdirectory guard: $sub_guard_exit_code"
-    echo "Error: Subdirectory does not exist $DIR_TO_DELETE/$d"
-    cat "$sub_guard_output"
-    continue
-  fi
-  # List files in subdirectory
-  sub_ls="$tmpdir/ls_$d.txt"
-  printf '%s\n' "cd $DIR_TO_DELETE/$d" "ls -l" "bye" | sshpass -e sftp -oBatchMode=no -oStrictHostKeyChecking=no -P "$FTP_PORT" "$FTP_USERNAME@$FTP_SERVER" > "$sub_ls" 2>&1 || true
-  echo "SFTP ls output for $DIR_TO_DELETE/$d:"
-  cat "$sub_ls"
-  sub_files=$(awk '/^-/{print $NF}' "$sub_ls")
-  sub_dirs=$(awk '/^d/{print $NF}' "$sub_ls")
-  for sf in $sub_files; do
-    echo "rm $DIR_TO_DELETE/$d/$sf" >> "$batch"
+  echo "SFTP ls output for $path:"
+  cat "$ls_out"
+
+  local files dirs
+  files=$(awk '/^-/{print $NF}' "$ls_out")
+  dirs=$(awk '/^d/{print $NF}' "$ls_out")
+
+  for f in $files; do
+    echo "rm $path/$f" >> "$batch"
   done
-  # No recursion: only one level deep
-  for sd in $sub_dirs; do
-    echo "rmdir $DIR_TO_DELETE/$d/$sd" >> "$batch"
-  done
-  echo "rmdir $DIR_TO_DELETE/$d" >> "$batch"
-done
 
-# Always attempt to remove the directory itself at the end
+  for d in $dirs; do
+    build_delete_commands "$path/$d"
+    echo "rmdir $path/$d" >> "$batch"
+  done
+}
+
+build_delete_commands "$DIR_TO_DELETE"
 echo "rmdir $DIR_TO_DELETE" >> "$batch"
 
 if [ -s "$batch" ]; then
@@ -83,6 +69,10 @@ if [ -s "$batch" ]; then
   (cat "$batch"; echo "bye") | sshpass -e sftp -oBatchMode=no -oStrictHostKeyChecking=no -P "$FTP_PORT" "$FTP_USERNAME@$FTP_SERVER" > "$delete_output" 2>&1
   echo "SFTP delete output for $DIR_TO_DELETE:"
   cat "$delete_output"
+  if grep -qi "Failure" "$delete_output"; then
+    echo "Error: SFTP delete reported a failure for $DIR_TO_DELETE"
+    exit 1
+  fi
   echo "Remote directory cleaned up."
 else
   echo "No files or directories to delete in $DIR_TO_DELETE."
