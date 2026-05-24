@@ -42,7 +42,7 @@ build_delete_commands() {
 
   printf '%s\n' "cd $path" "ls -l" "bye" \
     | sshpass -e sftp -oBatchMode=no -oStrictHostKeyChecking=no -P "$FTP_PORT" "$FTP_USERNAME@$FTP_SERVER" \
-    > "$ls_out" 2>&1 || true
+    > "$ls_out" 2>&1
 
   echo "SFTP ls output for $path:"
   cat "$ls_out"
