@@ -49,7 +49,7 @@ build_delete_commands() {
 
   local files dirs
   files=$(awk '/^-/{print $NF}' "$ls_out")
-  dirs=$(awk '/^d/{print $NF}' "$ls_out")
+  dirs=$(awk '/^d/ && $NF != "." && $NF != ".." {print $NF}' "$ls_out")
 
   for f in $files; do
     echo "rm $path/$f" >> "$batch"
@@ -57,12 +57,12 @@ build_delete_commands() {
 
   for d in $dirs; do
     build_delete_commands "$path/$d"
-    echo "rmdir $path/$d" >> "$batch"
   done
+
+  echo "rmdir $path" >> "$batch"
 }
 
 build_delete_commands "$DIR_TO_DELETE"
-echo "rmdir $DIR_TO_DELETE" >> "$batch"
 
 if [ -s "$batch" ]; then
   delete_output="$tmpdir/delete_output.txt"
